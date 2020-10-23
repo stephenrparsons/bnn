@@ -1,3 +1,5 @@
+**/images/
+
 debug*png
 maml_*out
 maml_*db
@@ -17,6 +19,5 @@ tb
 o_*png
 train*png
 test*png
-images
 *pyc
 *py~
