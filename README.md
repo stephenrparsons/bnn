@@ -10,9 +10,11 @@ I (Stephen) have made some initial changes:
 - `label_ui.py` sort of adjusts to different image sizes (not done with this)
 and some other cosmetic tweaks
 
-Next up is to continue working on the labeling UI so that we can start building
-a database from the bedbug images, and start experimenting with training the
-network.
+This does already enable one to start labeling bedbug images and storing the
+labels in the database, which is great. However since it doesn't resize the images
+to fit the screen, usually only part of each image is shown which isn't all that
+useful. So next up is to enable it to resize images to fit the screen, so we can
+start labeling for real. Then begins the experimentation with training a network.
 
 The following example commands show how I have been using this. This depends on
 having some readable (not raw) images in the `image-dir` directory, in the below case
