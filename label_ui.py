@@ -1,10 +1,14 @@
+import argparse
 import tkinter as tk
-from PIL import Image, ImageTk, ImageDraw
 import os
-import sqlite3
+import platform
 import random
-from label_db import LabelDB
 import re
+import sqlite3
+
+from PIL import Image, ImageTk, ImageDraw
+
+from label_db import LabelDB
 
 class LabelUI():
   def __init__(self, label_db_filename, img_dir, width, height, sort=True):
@@ -25,6 +29,7 @@ class LabelUI():
 
     # TK UI
     root = tk.Tk()
+    root.lift()
     root.title(label_db_filename)
     root.bind('<Right>', self.display_next_image)
     print("RIGHT  next image")
@@ -32,13 +37,16 @@ class LabelUI():
     print("LEFT   previous image")
     root.bind('<Up>', self.toggle_bees)
     print("UP     toggle labels")
+    root.bind('n', self.display_next_unlabelled_image)
     root.bind('N', self.display_next_unlabelled_image)
     print("N   next image with 0 labels")
+    root.bind('q', self.quit)
     root.bind('Q', self.quit)
     print("Q   quit")
     self.canvas = tk.Canvas(root, cursor='tcross')
     self.canvas.config(width=width, height=height)
     self.canvas.bind('<Button-1>', self.add_bee_event)  # left mouse button
+    self.canvas.bind('<Button-2>', self.remove_closest_bee_event)  # right mouse button on macbook, evidently
     self.canvas.bind('<Button-3>', self.remove_closest_bee_event)  # right mouse button
 
     self.canvas.pack()
@@ -55,6 +63,12 @@ class LabelUI():
     # Main review loop
     self.file_idx = 0
     self.display_new_image()
+
+    # Kind of ridiculous but OK! To make the window show in front of others
+    # From here: https://fyngyrz.com/?p=898&cpage=1
+    if platform.system() == 'Darwin':  # Only do this on Mac
+        os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+
     root.mainloop()
 
   def quit(self, e):
@@ -147,6 +161,8 @@ class LabelUI():
     # Display image (with filename added)
     title = img_name + " " + str(self.file_idx) + " of " + str(len(self.files)-1)
     img = Image.open(self.img_dir + "/" + img_name)
+    width, height = img.width, img.height
+    self.canvas.config(width=width, height=height)
     canvas = ImageDraw.Draw(img)
     canvas.text((0,0), title, fill='black')
     self.tk_img = ImageTk.PhotoImage(img)
@@ -157,13 +173,17 @@ class LabelUI():
       self.add_bee_at(x, y)
 
 
-import argparse
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--image-dir', type=str, required=True)
-parser.add_argument('--label-db', type=str, required=True)
-parser.add_argument('--width', type=int, default=768, help='input image width')
-parser.add_argument('--height', type=int, default=1024, help='input image height')
-parser.add_argument('--no-sort', action='store_true')
-opts = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--image-dir', type=str, required=True)
+    parser.add_argument('--label-db', type=str, required=True)
+    parser.add_argument('--width', type=int, default=768, help='input image width')
+    parser.add_argument('--height', type=int, default=1024, help='input image height')
+    parser.add_argument('--no-sort', action='store_true')
+    opts = parser.parse_args()
 
-LabelUI(opts.label_db, opts.image_dir, opts.width, opts.height, sort=not opts.no_sort)
+    LabelUI(opts.label_db, opts.image_dir, opts.width, opts.height, sort=not opts.no_sort)
+
+
+if __name__ == '__main__':
+    main()
