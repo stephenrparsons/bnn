@@ -1,3 +1,34 @@
+# Bedbud detector
+
+This project is designed to automatically detect bedbugs from a particular
+experimental capture setup. The code is based on Mat Kelcey's "BNN" for
+detecting bees in images.
+
+I (Stephen) have made some initial changes:
+
+- `requirements.txt` now has specific non-conflicting versions of everything
+- `label_ui.py` sort of adjusts to different image sizes (not done with this)
+and some other cosmetic tweaks
+
+Next up is to continue working on the labeling UI so that we can start building
+a database from the bedbug images, and start experimenting with training the
+network.
+
+The following example commands show how I have been using this. This depends on
+having some readable (not raw) images in the `image-dir` directory, in the below case
+`data/images/2020-04 60D/png`. I have images on my machine in the `data/images`
+directory, but they don't get uploaded to the repository since I instructed
+git not to pay attention to that directory using the file `.gitignore`.
+
+```
+$ virtualenv -p python3 venv
+$ . venv/bin/activate
+(venv) $ pip install -r requirements.txt
+(venv) $ python label_ui.py --image-dir data/images/2020-04\ 60D/png --label-db data/labels.db
+```
+
+The original README from Mat's bee project is below.
+
 # BNN v2
 
 unet style image translation from image of hive entrance to bitmap of location of center of bees.
