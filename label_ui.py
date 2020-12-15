@@ -164,12 +164,14 @@ class LabelUI():
     # Open image
     img_name = self.files[self.file_idx]
     img = Image.open(os.path.join(self.img_dir, img_name))
-    width, height = img.width, img.height
+
+    # Resize image: https://stackoverflow.com/a/273962
+    img.thumbnail((canvas_width, canvas_height), Image.ANTIALIAS)
 
     # Draw image title
     draw = ImageDraw.Draw(img)
-    title = f'{img_name} {self.file_idx} of {len(self.files)-1}'
-    draw.text((0,0), title, fill='black')
+    title = f'{img_name} {self.file_idx + 1} of {len(self.files)}'
+    draw.text((10, 10), title, fill='black')
 
     # Draw image on screen
     self.tk_img = ImageTk.PhotoImage(img)
