@@ -10,6 +10,7 @@ from PIL import Image, ImageTk, ImageDraw
 
 from label_db import LabelDB
 
+
 class LabelUI():
   def __init__(self, label_db_filename, img_dir, width, height, sort=True):
 
@@ -31,34 +32,32 @@ class LabelUI():
     root = tk.Tk()
     root.lift()
     root.title(label_db_filename)
+
+    # Bind buttons
     root.bind('<Right>', self.display_next_image)
-    print("RIGHT  next image")
     root.bind('<Left>', self.display_previous_image)
-    print("LEFT   previous image")
-    root.bind('<Up>', self.toggle_bees)
-    print("UP     toggle labels")
+    root.bind('<Up>', self.toggle_bugs)
     root.bind('n', self.display_next_unlabelled_image)
     root.bind('N', self.display_next_unlabelled_image)
-    print("N   next image with 0 labels")
     root.bind('q', self.quit)
     root.bind('Q', self.quit)
-    print("Q   quit")
+
+    # Set up canvas
     self.canvas = tk.Canvas(root, cursor='tcross')
     self.canvas.config(width=width, height=height)
-    self.canvas.bind('<Button-1>', self.add_bee_event)  # left mouse button
-    self.canvas.bind('<Button-2>', self.remove_closest_bee_event)  # right mouse button on macbook, evidently
-    self.canvas.bind('<Button-3>', self.remove_closest_bee_event)  # right mouse button
-
+    self.canvas.bind('<Button-1>', self.add_bug_event)  # left mouse button
+    self.canvas.bind('<Button-2>', self.remove_closest_bug_event)  # right mouse button on macbook, evidently
+    self.canvas.bind('<Button-3>', self.remove_closest_bug_event)  # right mouse button
     self.canvas.pack()
 
-    # A lookup table from bee x,y to any rectangles that have been drawn
+    # A lookup table from bug x,y to any rectangles that have been drawn
     # in case we want to remove one. the keys of this dict represent all
-    # the bee x,y in current image.
+    # the bug x,y in current image.
     self.x_y_to_boxes = {}  # { (x, y): canvas_id, ... }
 
-    # a flag to denote if bees are being displayed or not
+    # a flag to denote if bugs are being displayed or not
     # while no displayed we lock down all img navigation
-    self.bees_on = True
+    self.bugs_on = True
 
     # Main review loop
     self.file_idx = 0
@@ -74,37 +73,37 @@ class LabelUI():
   def quit(self, e):
         exit()
 
-  def add_bee_event(self, e):
-    if not self.bees_on:
-      print("ignore add bee; bees not on")
+  def add_bug_event(self, e):
+    if not self.bugs_on:
+      print("ignore add bug; bugs not on")
       return
-    self.add_bee_at(e.x, e.y)
+    self.add_bug_at(e.x, e.y)
 
-  def add_bee_at(self, x, y):
+  def add_bug_at(self, x, y):
     rectangle_id = self.canvas.create_rectangle(x-2,y-2,x+2,y+2, fill='red')
     self.x_y_to_boxes[(x, y)] = rectangle_id
 
-  def remove_bee(self, rectangle_id):
+  def remove_bug(self, rectangle_id):
     self.canvas.delete(rectangle_id)
 
-  def toggle_bees(self, e):
-    if self.bees_on:
+  def toggle_bugs(self, e):
+    if self.bugs_on:
       # store x,y s in tmp list and delete all rectangles from canvas
       self.tmp_x_y = []
       for (x, y), rectangle_id in self.x_y_to_boxes.items():
-        self.remove_bee(rectangle_id)
+        self.remove_bug(rectangle_id)
         self.tmp_x_y.append((x, y))
       self.x_y_to_boxes = {}
-      self.bees_on = False
-    else:  # bees not on
-      # restore all temp stored bees
+      self.bugs_on = False
+    else:  # bugs not on
+      # restore all temp stored bugs
       for x, y in self.tmp_x_y:
-        self.add_bee_at(x, y)
-      self.bees_on = True
+        self.add_bug_at(x, y)
+      self.bugs_on = True
 
-  def remove_closest_bee_event(self, e):
-    if not self.bees_on:
-      print("ignore remove bee; bees not on")
+  def remove_closest_bug_event(self, e):
+    if not self.bugs_on:
+      print("ignore remove bug; bugs not on")
       return
     if len(self.x_y_to_boxes) == 0: return
     closest_point = None
@@ -114,11 +113,11 @@ class LabelUI():
       if sqr_distance < closest_sqr_distance or closest_point is None:
         closest_point = (x, y)
         closest_sqr_distance = sqr_distance
-    self.remove_bee(self.x_y_to_boxes.pop(closest_point))
+    self.remove_bug(self.x_y_to_boxes.pop(closest_point))
 
   def display_next_image(self, e=None):
-    if not self.bees_on:
-      print("ignore move to next image; bees not on")
+    if not self.bugs_on:
+      print("ignore move to next image; bugs not on")
       return
     self._flush_pending_x_y_to_boxes()
     self.file_idx += 1
@@ -140,8 +139,8 @@ class LabelUI():
     self.display_new_image()
 
   def display_previous_image(self, e=None):
-    if not self.bees_on:
-      print("ignore move to previous image; bees not on")
+    if not self.bugs_on:
+      print("ignore move to previous image; bugs not on")
       return
     self._flush_pending_x_y_to_boxes()
     self.file_idx -= 1
@@ -157,32 +156,47 @@ class LabelUI():
     self.x_y_to_boxes.clear()
 
   def display_new_image(self):
+    # Get current canvas size
+    self.canvas.update()  # https://stackoverflow.com/a/49216638
+    canvas_width = self.canvas.winfo_width()
+    canvas_height = self.canvas.winfo_height()
+
+    # Open image
     img_name = self.files[self.file_idx]
-    # Display image (with filename added)
-    title = img_name + " " + str(self.file_idx) + " of " + str(len(self.files)-1)
-    img = Image.open(self.img_dir + "/" + img_name)
+    img = Image.open(os.path.join(self.img_dir, img_name))
     width, height = img.width, img.height
-    self.canvas.config(width=width, height=height)
-    canvas = ImageDraw.Draw(img)
-    canvas.text((0,0), title, fill='black')
+
+    # Draw image title
+    draw = ImageDraw.Draw(img)
+    title = f'{img_name} {self.file_idx} of {len(self.files)-1}'
+    draw.text((0,0), title, fill='black')
+
+    # Draw image on screen
     self.tk_img = ImageTk.PhotoImage(img)
-    self.canvas.create_image(0,0, image=self.tk_img, anchor=tk.NW)
-    # Look up any existing bees in DB for this image.
+    self.canvas.create_image(0, 0, image=self.tk_img, anchor=tk.NW)
+
+    # Look up any existing bugs in DB for this image and add them
     existing_labels = self.label_db.get_labels(img_name)
     for x, y in existing_labels:
-      self.add_bee_at(x, y)
+      self.add_bug_at(x, y)
 
 
 def main():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser()
     parser.add_argument('--image-dir', type=str, required=True)
     parser.add_argument('--label-db', type=str, required=True)
-    parser.add_argument('--width', type=int, default=768, help='input image width')
-    parser.add_argument('--height', type=int, default=1024, help='input image height')
+    parser.add_argument('--width', type=int, default=768, help='starting window width')
+    parser.add_argument('--height', type=int, default=1024, help='starting window height')
     parser.add_argument('--no-sort', action='store_true')
-    opts = parser.parse_args()
+    args = parser.parse_args()
 
-    LabelUI(opts.label_db, opts.image_dir, opts.width, opts.height, sort=not opts.no_sort)
+    print("RIGHT\tnext image")
+    print("LEFT\tprevious image")
+    print("UP\ttoggle labels")
+    print("N\tnext image with 0 labels")
+    print("Q\tquit")
+
+    LabelUI(args.label_db, args.image_dir, args.width, args.height, sort=not args.no_sort)
 
 
 if __name__ == '__main__':
