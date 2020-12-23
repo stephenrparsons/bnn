@@ -42,13 +42,20 @@ class LabelUI():
     root.bind('q', self.quit)
     root.bind('Q', self.quit)
 
+    root.bind('<Configure>', self.resize)
+
     # Set up canvas
     self.canvas = tk.Canvas(root, cursor='tcross')
     self.canvas.config(width=width, height=height)
     self.canvas.bind('<Button-1>', self.add_bug_event)  # left mouse button
     self.canvas.bind('<Button-2>', self.remove_closest_bug_event)  # right mouse button on macbook, evidently
     self.canvas.bind('<Button-3>', self.remove_closest_bug_event)  # right mouse button
-    self.canvas.pack()
+    self.canvas.pack(expand=True, fill='both')
+
+    # LEFT OFF scaling canvas appropriately
+    # https://docstore.mik.ua/orelly/perl3/tk/ch09_19.htm
+    # https://tkdocs.com/tutorial/concepts.html
+    # https://stackoverflow.com/questions/22835289/how-to-get-tkinter-canvas-to-dynamically-resize-to-window-width
 
     # A lookup table from bug x,y to any rectangles that have been drawn
     # in case we want to remove one. the keys of this dict represent all
@@ -61,7 +68,7 @@ class LabelUI():
 
     # Main review loop
     self.file_idx = 0
-    self.display_new_image()
+    self.display_image()
 
     # Kind of ridiculous but OK! To make the window show in front of others
     # From here: https://fyngyrz.com/?p=898&cpage=1
@@ -71,7 +78,10 @@ class LabelUI():
     root.mainloop()
 
   def quit(self, e):
-        exit()
+    exit()
+
+  def resize(self, e):
+    self.display_image()
 
   def add_bug_event(self, e):
     if not self.bugs_on:
@@ -124,7 +134,7 @@ class LabelUI():
     if self.file_idx == len(self.files):
       print("Can't move to image past last image.")
       self.file_idx = len(self.files) - 1
-    self.display_new_image()
+    self.display_image()
 
   def display_next_unlabelled_image(self, e=None):
     self._flush_pending_x_y_to_boxes()
@@ -136,7 +146,7 @@ class LabelUI():
         break
       if not self.label_db.has_labels(self.files[self.file_idx]):
         break
-    self.display_new_image()
+    self.display_image()
 
   def display_previous_image(self, e=None):
     if not self.bugs_on:
@@ -147,7 +157,7 @@ class LabelUI():
     if self.file_idx < 0:
       print("Can't move to image previous to first image.")
       self.file_idx = 0
-    self.display_new_image()
+    self.display_image()
 
   def _flush_pending_x_y_to_boxes(self):
     # Flush existing points.
@@ -155,11 +165,12 @@ class LabelUI():
     self.label_db.set_labels(img_name, self.x_y_to_boxes.keys())
     self.x_y_to_boxes.clear()
 
-  def display_new_image(self):
+  def display_image(self):
     # Get current canvas size
     self.canvas.update()  # https://stackoverflow.com/a/49216638
     canvas_width = self.canvas.winfo_width()
     canvas_height = self.canvas.winfo_height()
+    print(canvas_width, canvas_height)
 
     # Open image
     img_name = self.files[self.file_idx]
