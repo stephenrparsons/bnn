@@ -1,4 +1,4 @@
-# Bedbud detector
+# Bedbug detector
 
 This project is designed to automatically detect bedbugs from a particular
 experimental capture setup. The code is based on Mat Kelcey's "BNN" for
