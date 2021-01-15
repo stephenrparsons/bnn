@@ -27,6 +27,8 @@ protobuf==3.13.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pyparsing==2.4.7
+PyQt5==5.15.2
+PyQt5-sip==12.8.1
 python-dateutil==2.8.1
 python-utils==2.4.0
 PyWavelets==1.1.1
