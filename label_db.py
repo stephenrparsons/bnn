@@ -34,7 +34,12 @@ class LabelDB(object):
 
   def has_labels(self, img):
     id = self._id_for_img(img)
-    return id is not None
+    if id is None:
+        return False
+    c = self.conn.cursor()
+    c.execute('select img_id from labels where img_id=?', (id,))
+    label = c.fetchone()
+    return label is not None
 
   def get_labels(self, img):
     if not self.has_labels(img):
