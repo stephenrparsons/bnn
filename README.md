@@ -23,6 +23,13 @@ $ . venv/bin/activate
 (venv) $ python label_ui.py --image-dir data/images/2020-04\ 60D/png --label-db data/labels.db
 ```
 
+## TODO
+
+- [x] allow images of different sizes
+- [x] allow zoom/pan
+- [x] switch from tkinter to PyQt5 since tkinter [being weird](https://bugs.python.org/issue42480)
+- [ ] support raw images
+
 The original README from Mat's bee project is below.
 
 # BNN v2
