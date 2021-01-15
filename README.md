@@ -7,14 +7,8 @@ detecting bees in images.
 I (Stephen) have made some initial changes:
 
 - `requirements.txt` now has specific non-conflicting versions of everything
-- `label_ui.py` sort of adjusts to different image sizes (not done with this)
-and some other cosmetic tweaks
-
-This does already enable one to start labeling bedbug images and storing the
-labels in the database, which is great. However since it doesn't resize the images
-to fit the screen, usually only part of each image is shown which isn't all that
-useful. So next up is to enable it to resize images to fit the screen, so we can
-start labeling for real. Then begins the experimentation with training a network.
+- `label_ui.py` adjusts to different image sizes and allows zoom/pan
+(also the graphics framework was changed).
 
 The following example commands show how I have been using this. This depends on
 having some readable (not raw) images in the `image-dir` directory, in the below case
