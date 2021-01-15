@@ -29,6 +29,8 @@ $ . venv/bin/activate
 - [x] allow zoom/pan
 - [x] switch from tkinter to PyQt5 since tkinter [being weird](https://bugs.python.org/issue42480)
 - [ ] support raw images
+- [ ] support labeling of tick marks
+- [ ] figure out image directory structure
 
 The original README from Mat's bee project is below.
 
