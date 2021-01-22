@@ -4,9 +4,12 @@ import os
 import re
 import sys
 
+from PIL import Image
+from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush
 from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene
+import rawpy
 
 from label_db import LabelDB
 
@@ -115,11 +118,10 @@ class LabelUI(QGraphicsView):
     def set_image(self, image):
         """ Set the scene's current image pixmap to the input QImage or QPixmap.
         Raises a RuntimeError if the input image has type other than QImage or QPixmap.
-        :type image: QImage | QPixmap
         """
         if type(image) is QPixmap:
             pixmap = image
-        elif type(image) is QImage:
+        elif isinstance(image, QImage):
             pixmap = QPixmap.fromImage(image)
         else:
             raise RuntimeError("ImageViewer.setImage: Argument must be a QImage or QPixmap.")
@@ -205,7 +207,20 @@ class LabelUI(QGraphicsView):
     def display_image(self):
         # Open image
         img_name = self.files[self.file_idx]
-        img = QImage(os.path.join(self.img_dir, img_name))
+        img_path = os.path.join(self.img_dir, img_name)
+        if img_path.endswith('.cr2'):
+            # Read raw file
+            raw = rawpy.imread(img_path)
+            # Convert to PIL Image
+            img = Image.fromarray(raw.postprocess())
+            # For some reason this is needed to get these to display in the interface
+            img = img.convert('RGBA')
+            # Turn all .cr2 images right side up
+            img = img.transpose(Image.ROTATE_180)
+            # Convert to QImage
+            img = ImageQt(img)
+        else:
+            img = ImageQt(Image.open(img_path))
         self.set_image(img)
 
         # Draw image title
