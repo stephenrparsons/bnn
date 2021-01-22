@@ -208,19 +208,18 @@ class LabelUI(QGraphicsView):
         # Open image
         img_name = self.files[self.file_idx]
         img_path = os.path.join(self.img_dir, img_name)
-        if img_path.endswith('.cr2'):
+        # If this is a raw file it gets special treatment
+        if img_path.lower().endswith('.cr2'):
             # Read raw file
             raw = rawpy.imread(img_path)
             # Convert to PIL Image
             img = Image.fromarray(raw.postprocess())
             # For some reason this is needed to get these to display in the interface
             img = img.convert('RGBA')
-            # Turn all .cr2 images right side up
-            img = img.transpose(Image.ROTATE_180)
-            # Convert to QImage
-            img = ImageQt(img)
         else:
-            img = ImageQt(Image.open(img_path))
+            img = Image.open(img_path)
+        # Convert to QImage
+        img = ImageQt(img)
         self.set_image(img)
 
         # Draw image title

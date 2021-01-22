@@ -29,7 +29,8 @@ $ . venv/bin/activate
 - [x] allow zoom/pan
 - [x] switch from tkinter to PyQt5 since tkinter [being weird](https://bugs.python.org/issue42480)
 - [x] support raw images
-- [ ] decide for raw images: flip them over on disk? if not, store their label coordinates flipped or not?
+- [x] decide for raw images: flip them over on disk? (yes) ~~if not, store their label coordinates flipped or not?~~
+- [ ] initial data processing: flip raw images, convert to png
 - [ ] support labeling of tick marks
 - [ ] figure out image directory structure
 
