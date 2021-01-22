@@ -1,34 +1,29 @@
 import argparse
 import math
 import os
-import platform
-import random
 import re
 import sys
 
-from PIL import Image, ImageTk, ImageDraw
-from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QT_VERSION_STR
+from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QFileDialog
+from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene
 
 from label_db import LabelDB
 
 
 class LabelUI(QGraphicsView):
-    """ PyQt image viewer widget for a QPixmap in a QGraphicsView scene with mouse zooming and panning.
-    Displays a QImage or QPixmap (QImage is internally converted to a QPixmap).
-    To display any other image format, you must first convert it to a QImage or QPixmap.
-    Some useful image format conversion utilities:
-        qimage2ndarray: NumPy ndarray <==> QImage    (https://github.com/hmeine/qimage2ndarray)
-        ImageQt: PIL Image <==> QImage  (https://github.com/python-pillow/Pillow/blob/master/PIL/ImageQt.py)
+    """PyQt image viewer adapted from
+    https://github.com/marcel-goldschen-ohm/PyQtImageViewer/blob/master/QtImageViewer.py
+
     Mouse interaction:
-        Left mouse button drag: Pan image.
-        Right mouse button drag: Zoom box.
-        Right mouse button doubleclick: Zoom to show entire image.
+        - Left mouse button drag: Pan image.
+        - Right mouse button drag: Zoom box.
+        - Right mouse button double click: Zoom to show entire image.
     """
 
-    # Mouse button signals emit image scene (x, y) coordinates.
-    # !!! For image (row, column) matrix indexing, row = y and column = x.
+    # Create signals for mouse events.
+    # Note that mouse button signals emit (x, y) coordinates
+    # but image matrices are indexed (y, x).
     leftMouseButtonPressed = pyqtSignal(float, float)
     rightMouseButtonPressed = pyqtSignal(float, float)
     leftMouseButtonReleased = pyqtSignal(float, float)
@@ -36,18 +31,15 @@ class LabelUI(QGraphicsView):
     leftMouseButtonDoubleClicked = pyqtSignal(float, float)
     rightMouseButtonDoubleClicked = pyqtSignal(float, float)
 
-    def __init__(self, label_db_filename, img_dir, width, height, sort=True):
+    def __init__(self, label_db_filename, img_dir):
         QGraphicsView.__init__(self)
         self.setWindowTitle(label_db_filename)
 
         # what images to review?
         # note: drop trailing / in dir name (if present)
-        self.img_dir = re.sub("/$", "", img_dir)
+        self.img_dir = re.sub('/$', '', img_dir)
         self.files = os.listdir(img_dir)
-        if sort:
-            self.files = sorted(self.files)
-        else:
-            random.shuffle(self.files)
+        self.files = sorted(self.files)
 
         # label db
         self.label_db = LabelDB(label_db_filename)
@@ -93,18 +85,22 @@ class LabelUI(QGraphicsView):
         self.canZoom = True
         self.canPan = True
 
+        # Initialize some other variables used occasionally
+        self.tmp_x_y = []
+        self.click_start_pos = QPoint(0, 0)
+
         self.display_image()
         self.show()
 
-    def hasImage(self):
+    def has_image(self):
         """ Returns whether or not the scene contains an image pixmap.
         """
         return self._pixmapHandle is not None
 
-    def clearImage(self):
+    def clear_image(self):
         """ Removes the current image pixmap from the scene if it exists.
         """
-        if self.hasImage():
+        if self.has_image():
             self.scene.removeItem(self._pixmapHandle)
             self._pixmapHandle = None
 
@@ -112,11 +108,11 @@ class LabelUI(QGraphicsView):
         """ Returns the scene's current image pixmap as a QPixmap, or else None if no image exists.
         :rtype: QPixmap | None
         """
-        if self.hasImage():
+        if self.has_image():
             return self._pixmapHandle.pixmap()
         return None
 
-    def setImage(self, image):
+    def set_image(self, image):
         """ Set the scene's current image pixmap to the input QImage or QPixmap.
         Raises a RuntimeError if the input image has type other than QImage or QPixmap.
         :type image: QImage | QPixmap
@@ -127,17 +123,17 @@ class LabelUI(QGraphicsView):
             pixmap = QPixmap.fromImage(image)
         else:
             raise RuntimeError("ImageViewer.setImage: Argument must be a QImage or QPixmap.")
-        if self.hasImage():
+        if self.has_image():
             self._pixmapHandle.setPixmap(pixmap)
         else:
             self._pixmapHandle = self.scene.addPixmap(pixmap)
         self.setSceneRect(QRectF(pixmap.rect()))  # Set scene size to image size.
-        self.updateViewer()
+        self.update_viewer()
 
-    def updateViewer(self):
+    def update_viewer(self):
         """ Show current zoom (if showing entire image, apply current aspect ratio mode).
         """
-        if not self.hasImage():
+        if not self.has_image():
             return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
             self.fitInView(self.zoomStack[-1], Qt.IgnoreAspectRatio)  # Show zoomed rect (ignore aspect ratio).
@@ -148,47 +144,47 @@ class LabelUI(QGraphicsView):
     def resizeEvent(self, event):
         """ Maintain current zoom on resize.
         """
-        self.updateViewer()
+        self.update_viewer()
 
     def mousePressEvent(self, event):
         """ Start mouse pan or zoom mode.
         """
-        scenePos = self.mapToScene(event.pos())
-        self.click_startpos = event.pos()
+        scene_pos = self.mapToScene(event.pos())
+        self.click_start_pos = event.pos()
         if event.button() == Qt.LeftButton:
             if self.canPan:
                 self.setDragMode(QGraphicsView.ScrollHandDrag)
-            self.leftMouseButtonPressed.emit(scenePos.x(), scenePos.y())
+            self.leftMouseButtonPressed.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
             if self.canZoom:
                 self.setDragMode(QGraphicsView.RubberBandDrag)
-            self.rightMouseButtonPressed.emit(scenePos.x(), scenePos.y())
+            self.rightMouseButtonPressed.emit(scene_pos.x(), scene_pos.y())
         QGraphicsView.mousePressEvent(self, event)
 
     def mouseReleaseEvent(self, event):
         """ Stop mouse pan or zoom mode (apply zoom if valid).
         """
         QGraphicsView.mouseReleaseEvent(self, event)
-        scenePos = self.mapToScene(event.pos())
-        movement_vector = event.pos() - self.click_startpos
-        click_distance = math.sqrt(movement_vector.x()**2 + movement_vector.y()**2)
+        scene_pos = self.mapToScene(event.pos())
+        movement_vector = event.pos() - self.click_start_pos
+        click_distance = math.sqrt(movement_vector.x() ** 2 + movement_vector.y() ** 2)
         if event.button() == Qt.LeftButton:
             self.setDragMode(QGraphicsView.NoDrag)
             if click_distance < 1:
                 self.add_bug_event(event)
-            self.leftMouseButtonReleased.emit(scenePos.x(), scenePos.y())
+            self.leftMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
             if self.canZoom:
-                viewBBox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
-                selectionBBox = self.scene.selectionArea().boundingRect().intersected(viewBBox)
+                view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
+                selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
                 self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
-                if selectionBBox.isValid() and (selectionBBox != viewBBox):
-                    self.zoomStack.append(selectionBBox)
-                    self.updateViewer()
+                if selection_bbox.isValid() and (selection_bbox != view_bbox):
+                    self.zoomStack.append(selection_bbox)
+                    self.update_viewer()
             self.setDragMode(QGraphicsView.NoDrag)
             if click_distance < 1:
                 self.remove_closest_bug_event(event)
-            self.rightMouseButtonReleased.emit(scenePos.x(), scenePos.y())
+            self.rightMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Right:
@@ -204,13 +200,13 @@ class LabelUI(QGraphicsView):
         elif event.key() == Qt.Key_Escape:
             if self.canZoom:
                 self.zoomStack = []  # Clear zoom stack.
-                self.updateViewer()
+                self.update_viewer()
 
     def display_image(self):
         # Open image
         img_name = self.files[self.file_idx]
         img = QImage(os.path.join(self.img_dir, img_name))
-        self.setImage(img)
+        self.set_image(img)
 
         # Draw image title
         title = f'{img_name} ({self.file_idx + 1} of {len(self.files)})'
@@ -221,7 +217,7 @@ class LabelUI(QGraphicsView):
         for x, y in existing_labels:
             self.add_bug_at(x, y)
 
-    def display_next_image(self, e=None):
+    def display_next_image(self):
         if not self.bugs_on:
             print("ignore move to next image; bugs not on")
             return
@@ -232,7 +228,7 @@ class LabelUI(QGraphicsView):
             self.file_idx = len(self.files) - 1
         self.display_image()
 
-    def display_previous_image(self, e=None):
+    def display_previous_image(self):
         if not self.bugs_on:
             print("ignore move to previous image; bugs not on")
             return
@@ -243,7 +239,7 @@ class LabelUI(QGraphicsView):
             self.file_idx = 0
         self.display_image()
 
-    def display_next_unlabelled_image(self, e=None):
+    def display_next_unlabelled_image(self):
         self._flush_pending_x_y_to_boxes()
         while True:
             self.file_idx += 1
@@ -256,15 +252,15 @@ class LabelUI(QGraphicsView):
         self.display_image()
 
     def add_bug_at(self, x, y, size=8):
-        rectangle_id = self.scene.addRect(x - size//2, y - size//2, size, size, QPen(Qt.black), QBrush(Qt.red))
+        rectangle_id = self.scene.addRect(x - size // 2, y - size // 2, size, size, QPen(Qt.black), QBrush(Qt.red))
         self.x_y_to_boxes[(x, y)] = rectangle_id
 
     def add_bug_event(self, e):
-        scenePos = self.mapToScene(e.pos())
+        scene_pos = self.mapToScene(e.pos())
         if not self.bugs_on:
             print("ignore add bug; bugs not on")
             return
-        self.add_bug_at(scenePos.x(), scenePos.y())
+        self.add_bug_at(scene_pos.x(), scene_pos.y())
 
     def _flush_pending_x_y_to_boxes(self):
         # Flush existing points.
@@ -293,15 +289,16 @@ class LabelUI(QGraphicsView):
         self.scene.removeItem(rectangle_id)
 
     def remove_closest_bug_event(self, e):
-        scenePos = self.mapToScene(e.pos())
+        scene_pos = self.mapToScene(e.pos())
         if not self.bugs_on:
             print("ignore remove bug; bugs not on")
             return
-        if len(self.x_y_to_boxes) == 0: return
+        if len(self.x_y_to_boxes) == 0:
+            return
         closest_point = None
         closest_sqr_distance = 0.0
         for x, y in self.x_y_to_boxes.keys():
-            sqr_distance = (scenePos.x()-x)**2 + (scenePos.y()-y)**2
+            sqr_distance = (scene_pos.x() - x) ** 2 + (scene_pos.y() - y) ** 2
             if sqr_distance < closest_sqr_distance or closest_point is None:
                 closest_point = (x, y)
                 closest_sqr_distance = sqr_distance
@@ -312,27 +309,25 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--image-dir', type=str, required=True)
     parser.add_argument('--label-db', type=str, required=True)
-    parser.add_argument('--width', type=int, default=768, help='starting window width')
-    parser.add_argument('--height', type=int, default=1024, help='starting window height')
-    parser.add_argument('--no-sort', action='store_true')
     args = parser.parse_args()
 
-    print("Usage:")
-    print("    Left click: label bug")
-    print("    Right click: Remove nearest bug label")
-    print("    Drag right mouse: zoom to box")
-    print("    Drag left mouse: Pan (when zoomed in)")
-    print()
-    print("    RIGHT: next image")
-    print("    LEFT: previous image")
-    print("    UP: toggle labels")
-    print("    N: next image with no labels")
-    print("    ESC: reset zoom")
-    print("    Q: quit")
-    print()
+    print("""Usage:
+    Left click: label bug
+    Right click: Remove nearest bug label
+    Drag right mouse: zoom to box
+    Drag left mouse: Pan (when zoomed in)
+
+    RIGHT: next image
+    LEFT: previous image
+    UP: toggle labels
+    N: next image with no labels
+    ESC: reset zoom
+    Q: quit
+    """
+          )
 
     app = QApplication(sys.argv)
-    labelUI = LabelUI(args.label_db, args.image_dir, args.width, args.height, sort=not args.no_sort)
+    _ = LabelUI(args.label_db, args.image_dir)
     sys.exit(app.exec_())
 
 
