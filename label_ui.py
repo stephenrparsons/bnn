@@ -91,6 +91,7 @@ class LabelUI(QGraphicsView):
         # Initialize some other variables used occasionally
         self.tmp_x_y = []
         self.click_start_pos = QPoint(0, 0)
+        self._t_key_pressed = False
 
         self.display_image()
         self.show()
@@ -154,8 +155,11 @@ class LabelUI(QGraphicsView):
         scene_pos = self.mapToScene(event.pos())
         self.click_start_pos = event.pos()
         if event.button() == Qt.LeftButton:
-            if self.canPan:
-                self.setDragMode(QGraphicsView.ScrollHandDrag)
+            if self._t_key_pressed:
+                self.setDragMode(QGraphicsView.RubberBandDrag)
+            else:
+                if self.canPan:
+                    self.setDragMode(QGraphicsView.ScrollHandDrag)
             self.leftMouseButtonPressed.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
             if self.canZoom:
@@ -171,9 +175,15 @@ class LabelUI(QGraphicsView):
         movement_vector = event.pos() - self.click_start_pos
         click_distance = math.sqrt(movement_vector.x() ** 2 + movement_vector.y() ** 2)
         if event.button() == Qt.LeftButton:
+            view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
+            selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
+            self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
+            if selection_bbox.isValid() and (selection_bbox != view_bbox):
+                self.add_tickmark(selection_bbox)
+            else:
+                if click_distance < 1:
+                    self.add_bug_event(event)
             self.setDragMode(QGraphicsView.NoDrag)
-            if click_distance < 1:
-                self.add_bug_event(event)
             self.leftMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
             if self.canZoom:
@@ -203,6 +213,12 @@ class LabelUI(QGraphicsView):
             if self.canZoom:
                 self.zoomStack = []  # Clear zoom stack.
                 self.update_viewer()
+        elif event.key() == Qt.Key_T:
+            self._t_key_pressed = True
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_T:
+            self._t_key_pressed = False
 
     def display_image(self):
         # Open image
@@ -276,6 +292,13 @@ class LabelUI(QGraphicsView):
             return
         self.add_bug_at(scene_pos.x(), scene_pos.y())
 
+    def add_tickmark(self, box):
+        if not self.bugs_on:
+            print('ignore add tickmark; bugs not on')
+            return
+        rectangle_id = self.scene.addRect(box, QPen(Qt.blue, 20))
+        # TODO LEFT OFF actually do something with this
+
     def _flush_pending_x_y_to_boxes(self):
         # Flush existing points.
         img_name = self.files[self.file_idx]
@@ -330,6 +353,7 @@ def main():
     Right click: Remove nearest bug label
     Drag right mouse: zoom to box
     Drag left mouse: Pan (when zoomed in)
+    Drag left mouse while holding T: identify tick mark
 
     RIGHT: next image
     LEFT: previous image
