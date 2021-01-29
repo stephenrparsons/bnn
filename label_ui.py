@@ -6,26 +6,54 @@ import sys
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QPoint
-from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene
+from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush, QFont, QFontMetrics
+from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QInputDialog
 import rawpy
 
 from label_db import LabelDB
 
 
+class Label:
+    """Base class for labels, to be subclassed
+    """
+    def __init__(self, x, y, canvas_id):
+        self.x = x
+        self.y = y
+        self.canvas_id = canvas_id
+
+
+class Bug(Label):
+    """Bug label
+    """
+    def __init__(self, x, y, canvas_id):
+        super().__init__(x, y, canvas_id)
+
+
+class Tickmark(Label):
+    """Tickmark label for the mark itself, not the numbers
+    """
+    def __init__(self, x, y, canvas_id):
+        super().__init__(x, y, canvas_id)
+
+
+class TickmarkNumber(Label):
+    """Label surrounding the numbers written next to a tickmark
+    """
+    def __init__(self, x, y, canvas_id, width, height, value, number_canvas_id):
+        super().__init__(x, y, canvas_id)
+        self.width = width
+        self.height = height
+        self.value = value
+        self.number_canvas_id = number_canvas_id
+
+
 class LabelUI(QGraphicsView):
     """PyQt image viewer adapted from
     https://github.com/marcel-goldschen-ohm/PyQtImageViewer/blob/master/QtImageViewer.py
-
-    Mouse interaction:
-        - Left mouse button drag: Pan image.
-        - Right mouse button drag: Zoom box.
-        - Right mouse button double click: Zoom to show entire image.
     """
 
-    # Create signals for mouse events.
-    # Note that mouse button signals emit (x, y) coordinates
-    # but image matrices are indexed (y, x).
+    # Create signals for mouse events. Note that mouse button signals
+    # emit (x, y) coordinates but image matrices are indexed (y, x).
     leftMouseButtonPressed = pyqtSignal(float, float)
     rightMouseButtonPressed = pyqtSignal(float, float)
     leftMouseButtonReleased = pyqtSignal(float, float)
@@ -37,65 +65,65 @@ class LabelUI(QGraphicsView):
         QGraphicsView.__init__(self)
         self.setWindowTitle(label_db_filename)
 
-        # what images to review?
         self.img_dir = img_dir
         files_list = []
+        # Walk through directory tree, get all files
         for dir_path, dir_names, filenames in os.walk(img_dir):
             files_list += [os.path.join(dir_path, f) for f in filenames]
         files_list = sorted(files_list)
         self.files = files_list
 
-        # label db
+        # Label db
         self.label_db = LabelDB(label_db_filename)
         self.label_db.create_if_required()
 
-        # A lookup table from bug x,y to any rectangles that have been drawn
-        # in case we want to remove one. the keys of this dict represent all
-        # the bug x,y in current image.
-        self.x_y_to_boxes = {}  # { (x, y): canvas_id, ... }
+        # A lookup table from bug x,y to any labels that have been added
+        self.x_y_to_labels = {}  # { (x, y): Label, ... }
 
-        # a flag to denote if bugs are being displayed or not
-        # while no displayed we lock down all img navigation
+        # Flag to denote if bugs are being displayed or not.
+        # While not displayed, we lock down all image navigation
         self.bugs_on = True
 
         # Main review loop
         self.file_idx = 0
 
-        # Image is displayed as a QPixmap in a QGraphicsScene attached to this QGraphicsView.
+        # Image is displayed as a QPixmap in a QGraphicsScene attached to this QGraphicsView
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
 
-        # Store a local handle to the scene's current image pixmap.
+        # Store a local handle to the scene's current image pixmap
         self._pixmapHandle = None
 
-        # Image aspect ratio mode.
-        # !!! ONLY applies to full image. Aspect ratio is always ignored when zooming.
-        #   Qt.IgnoreAspectRatio: Scale image to fit viewport.
-        #   Qt.KeepAspectRatio: Scale image to fit inside viewport, preserving aspect ratio.
-        #   Qt.KeepAspectRatioByExpanding: Scale image to fill the viewport, preserving aspect ratio.
+        # Scale image to fit inside viewport, preserving aspect ratio
         self.aspectRatioMode = Qt.KeepAspectRatio
 
-        # Scroll bar behaviour.
-        #   Qt.ScrollBarAlwaysOff: Never shows a scroll bar.
-        #   Qt.ScrollBarAlwaysOn: Always shows a scroll bar.
-        #   Qt.ScrollBarAsNeeded: Shows a scroll bar only when zoomed.
+        # Shows a scroll bar only when zoomed
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        # Stack of QRectF zoom boxes in scene coordinates.
+        # Stack of QRectF zoom boxes in scene coordinates
         self.zoomStack = []
-
-        # Flags for enabling/disabling mouse interaction.
-        self.canZoom = True
-        self.canPan = True
 
         # Initialize some other variables used occasionally
         self.tmp_x_y = []
         self.click_start_pos = QPoint(0, 0)
         self._t_key_pressed = False
+        self._started_tickmark_click = False
+        self.complete = False
 
         self.display_image()
         self.show()
+
+    def update_title(self):
+        name = os.path.basename(self.files[self.file_idx])
+        num_bugs = 0
+        for label in self.x_y_to_labels.values():
+            if isinstance(label, Bug):
+                num_bugs += 1
+        title = f'{name} ({self.file_idx + 1} of {len(self.files)}): {num_bugs} bugs'
+        if self.complete:
+            title += ' [COMPLETE]'
+        self.setWindowTitle(title)
 
     def has_image(self):
         """ Returns whether or not the scene contains an image pixmap.
@@ -126,12 +154,12 @@ class LabelUI(QGraphicsView):
         elif isinstance(image, QImage):
             pixmap = QPixmap.fromImage(image)
         else:
-            raise RuntimeError("ImageViewer.setImage: Argument must be a QImage or QPixmap.")
+            raise RuntimeError('ImageViewer.setImage: Argument must be a QImage or QPixmap.')
         if self.has_image():
             self._pixmapHandle.setPixmap(pixmap)
         else:
             self._pixmapHandle = self.scene.addPixmap(pixmap)
-        self.setSceneRect(QRectF(pixmap.rect()))  # Set scene size to image size.
+        self.setSceneRect(QRectF(pixmap.rect()))  # Set scene size to image size
         self.update_viewer()
 
     def update_viewer(self):
@@ -140,10 +168,12 @@ class LabelUI(QGraphicsView):
         if not self.has_image():
             return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
-            self.fitInView(self.zoomStack[-1], Qt.IgnoreAspectRatio)  # Show zoomed rect (ignore aspect ratio).
+            self.fitInView(self.zoomStack[-1], Qt.IgnoreAspectRatio)  # Show zoomed rect (ignore aspect ratio)
         else:
-            self.zoomStack = []  # Clear the zoom stack (in case we got here because of an invalid zoom).
-            self.fitInView(self.sceneRect(), self.aspectRatioMode)  # Show entire image (use current aspect ratio mode).
+            # Clear the zoom stack (in case we got here because of an invalid zoom)
+            self.zoomStack = []
+            # Show entire image (use current aspect ratio mode)
+            self.fitInView(self.sceneRect(), self.aspectRatioMode)
 
     def resizeEvent(self, event):
         """ Maintain current zoom on resize.
@@ -157,14 +187,13 @@ class LabelUI(QGraphicsView):
         self.click_start_pos = event.pos()
         if event.button() == Qt.LeftButton:
             if self._t_key_pressed:
+                self._started_tickmark_click = True
                 self.setDragMode(QGraphicsView.RubberBandDrag)
             else:
-                if self.canPan:
-                    self.setDragMode(QGraphicsView.ScrollHandDrag)
+                self.setDragMode(QGraphicsView.ScrollHandDrag)
             self.leftMouseButtonPressed.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
-            if self.canZoom:
-                self.setDragMode(QGraphicsView.RubberBandDrag)
+            self.setDragMode(QGraphicsView.RubberBandDrag)
             self.rightMouseButtonPressed.emit(scene_pos.x(), scene_pos.y())
         QGraphicsView.mousePressEvent(self, event)
 
@@ -176,28 +205,31 @@ class LabelUI(QGraphicsView):
         movement_vector = event.pos() - self.click_start_pos
         click_distance = math.sqrt(movement_vector.x() ** 2 + movement_vector.y() ** 2)
         if event.button() == Qt.LeftButton:
-            view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
-            selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
-            self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
-            if selection_bbox.isValid() and (selection_bbox != view_bbox):
-                self.add_tickmark(selection_bbox)
+            if self._started_tickmark_click:
+                if click_distance < 1:
+                    self.add_tickmark_event(event)
+                view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
+                selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
+                self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
+                if selection_bbox.isValid() and (selection_bbox != view_bbox):
+                    self.add_tickmark_number_event(selection_bbox)
             else:
                 if click_distance < 1:
                     self.add_bug_event(event)
             self.setDragMode(QGraphicsView.NoDrag)
             self.leftMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
         elif event.button() == Qt.RightButton:
-            if self.canZoom:
-                view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
-                selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
-                self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
-                if selection_bbox.isValid() and (selection_bbox != view_bbox):
-                    self.zoomStack.append(selection_bbox)
-                    self.update_viewer()
+            view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
+            selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
+            self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
+            if selection_bbox.isValid() and (selection_bbox != view_bbox):
+                self.zoomStack.append(selection_bbox)
+                self.update_viewer()
             self.setDragMode(QGraphicsView.NoDrag)
             if click_distance < 1:
                 self.remove_closest_bug_event(event)
             self.rightMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
+        self._started_tickmark_click = False
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Right:
@@ -211,11 +243,13 @@ class LabelUI(QGraphicsView):
         elif event.key() == Qt.Key_Q:
             QApplication.instance().quit()
         elif event.key() == Qt.Key_Escape:
-            if self.canZoom:
-                self.zoomStack = []  # Clear zoom stack.
-                self.update_viewer()
+            self.zoomStack = []  # Clear zoom stack.
+            self.update_viewer()
         elif event.key() == Qt.Key_T:
             self._t_key_pressed = True
+        elif event.key() == Qt.Key_G:
+            self.complete = False if self.complete else True
+            self.update_title()
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_T:
@@ -233,25 +267,30 @@ class LabelUI(QGraphicsView):
             img = Image.fromarray(raw.postprocess())
         else:
             img = Image.open(img_path)
-        # For some reason RGB images do not like to display in the interface
+        # For some reason RGB images do not like to display in the interface.
         # RGBA seems to work
         img = img.convert('RGBA')
         # Convert to QImage
         img = ImageQt(img)
         self.set_image(img)
 
-        # Draw image title
-        title = f'{os.path.basename(img_name)} ({self.file_idx + 1} of {len(self.files)})'
-        self.setWindowTitle(title)
-
-        # Look up any existing bugs in DB for this image and add them
-        existing_labels = self.label_db.get_labels(img_name)
-        for x, y in existing_labels:
+        # Look up any existing labels in DB for this image and add them
+        existing_bugs = self.label_db.get_bugs(img_name)
+        for x, y in existing_bugs:
             self.add_bug_at(x, y)
+        existing_tickmarks = self.label_db.get_tickmarks(img_name)
+        for x, y in existing_tickmarks:
+            self.add_tickmark_at(x, y)
+        existing_tickmark_numbers = self.label_db.get_tickmark_numbers(img_name)
+        for x, y, w, h, val in existing_tickmark_numbers:
+            self.add_tickmark_number_at(x, y, w, h, val)
+        complete = self.label_db.get_complete(img_name)
+        self.complete = complete
+        self.update_title()
 
     def display_next_image(self):
         if not self.bugs_on:
-            print("ignore move to next image; bugs not on")
+            print('ignore move to next image; bugs not on')
             return
         self._flush_pending_x_y_to_boxes()
         self.file_idx += 1
@@ -262,7 +301,7 @@ class LabelUI(QGraphicsView):
 
     def display_previous_image(self):
         if not self.bugs_on:
-            print("ignore move to previous image; bugs not on")
+            print('ignore move to previous image; bugs not on')
             return
         self._flush_pending_x_y_to_boxes()
         self.file_idx -= 1
@@ -271,7 +310,7 @@ class LabelUI(QGraphicsView):
             self.file_idx = 0
         self.display_image()
 
-    def display_next_unlabelled_image(self):
+    def display_next_incomplete_image(self):
         self._flush_pending_x_y_to_boxes()
         while True:
             self.file_idx += 1
@@ -279,44 +318,62 @@ class LabelUI(QGraphicsView):
                 print("Can't move to image past last image.")
                 self.file_idx = len(self.files) - 1
                 break
-            if not self.label_db.has_labels(self.files[self.file_idx]):
+            if not self.label_db.get_complete(self.files[self.file_idx]):
                 break
         self.display_image()
 
-    def add_bug_at(self, x, y, size=8):
+    def add_bug_at(self, x, y):
+        size = self.scene.width() // 300
         rectangle_id = self.scene.addRect(x - size // 2, y - size // 2, size, size, QPen(Qt.black), QBrush(Qt.red))
-        self.x_y_to_boxes[(x, y)] = rectangle_id
+        self.x_y_to_labels[(x, y)] = Bug(x, y, rectangle_id)
+        self.update_title()
 
     def add_bug_event(self, e):
         scene_pos = self.mapToScene(e.pos())
         if not self.bugs_on:
-            print("ignore add bug; bugs not on")
+            print('ignore add bug; bugs not on')
             return
         self.add_bug_at(scene_pos.x(), scene_pos.y())
 
-    def add_tickmark(self, box):
+    def add_tickmark_number_event(self, box):
         if not self.bugs_on:
             print('ignore add tickmark; bugs not on')
             return
-        rectangle_id = self.scene.addRect(box, QPen(Qt.blue, 20))
-        # TODO LEFT OFF actually do something with this
+        rectangle_id = self.scene.addRect(box, QPen(Qt.blue, self.scene.width() // 300))
+        val, _ = QInputDialog.getInt(self, 'Input', 'Enter tickmark value:')
+        font = QFont()
+        font_pixel_size = 1
+        font.setPixelSize(font_pixel_size)
+        while QFontMetrics(font).boundingRect(str(val)).width() < box.width()\
+                and QFontMetrics(font).boundingRect(str(val)).height() < box.height():
+            font_pixel_size += 1
+            font.setPixelSize(font_pixel_size)
+        font_pixel_size -= 1
+        number_canvas_id = self.scene.addText(str(val), font)
+        number_canvas_id.setDefaultTextColor(Qt.blue)
+        number_canvas_id.setPos(QPoint(int(box.x()), int(box.y())))
+        self.x_y_to_labels[(box.x, box.y)] = TickmarkNumber(box.x, box.y, rectangle_id,
+                                                            box.width(), box.height(), val,
+                                                            number_canvas_id)
+        # TODO LEFT OFF make t toggle tickmark mode rather than current thing
 
     def _flush_pending_x_y_to_boxes(self):
+        # TODO fix this to handle all things
         # Flush existing points.
         img_name = self.files[self.file_idx]
-        self.label_db.set_labels(img_name, self.x_y_to_boxes.keys())
-        for rect in self.x_y_to_boxes.values():
+        self.label_db.set_labels(img_name, self.x_y_to_labels.keys())
+        for rect in self.x_y_to_labels.values():
             self.scene.removeItem(rect)
-        self.x_y_to_boxes.clear()
+        self.x_y_to_labels.clear()
 
     def toggle_bugs(self):
         if self.bugs_on:
             # store x,y s in tmp list and delete all rectangles from canvas
             self.tmp_x_y = []
-            for (x, y), rectangle_id in self.x_y_to_boxes.items():
+            for (x, y), rectangle_id in self.x_y_to_labels.items():
                 self.remove_bug(rectangle_id)
                 self.tmp_x_y.append((x, y))
-            self.x_y_to_boxes = {}
+            self.x_y_to_labels = {}
             self.bugs_on = False
         else:  # bugs not on
             # restore all temp stored bugs
@@ -330,18 +387,18 @@ class LabelUI(QGraphicsView):
     def remove_closest_bug_event(self, e):
         scene_pos = self.mapToScene(e.pos())
         if not self.bugs_on:
-            print("ignore remove bug; bugs not on")
+            print('ignore remove bug; bugs not on')
             return
-        if len(self.x_y_to_boxes) == 0:
+        if len(self.x_y_to_labels) == 0:
             return
         closest_point = None
         closest_sqr_distance = 0.0
-        for x, y in self.x_y_to_boxes.keys():
+        for x, y in self.x_y_to_labels.keys():
             sqr_distance = (scene_pos.x() - x) ** 2 + (scene_pos.y() - y) ** 2
             if sqr_distance < closest_sqr_distance or closest_point is None:
                 closest_point = (x, y)
                 closest_sqr_distance = sqr_distance
-        self.remove_bug(self.x_y_to_boxes.pop(closest_point))
+        self.remove_bug(self.x_y_to_labels.pop(closest_point))
 
 
 def main():
@@ -350,7 +407,7 @@ def main():
     parser.add_argument('--label-db', type=str, required=True)
     args = parser.parse_args()
 
-    print("""Usage:
+    print('''Usage:
     Left click: label bug
     Right click: Remove nearest bug label
     Drag right mouse: zoom to box
@@ -363,7 +420,7 @@ def main():
     N: next image with no labels
     ESC: reset zoom
     Q: quit
-    """
+    '''
           )
 
     app = QApplication(sys.argv)

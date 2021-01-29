@@ -32,7 +32,7 @@ $ . venv/bin/activate
 - [x] decide for raw images: flip them over on disk? (yes) ~~if not, store their label coordinates flipped or not?~~
 - [ ] initial data processing: flip raw images, convert to png
 - [ ] support labeling of tick marks
-- [ ] figure out image directory structure
+- [x] figure out image directory structure
 
 The original README from Mat's bee project is below.
 

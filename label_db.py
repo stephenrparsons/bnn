@@ -9,22 +9,23 @@ class LabelDB(object):
         # called once to create db
         c = self.conn.cursor()
         try:
-            c.execute('''create table imgs (
+            c.execute('''create table images (
                           id integer primary key autoincrement,
-                          filename text
+                          filename text,
+                          complete boolean
                      )''')
-            c.execute('''create table labels (
-                          img_id integer,
+            c.execute('''create table bugs (
+                          image_id integer,
                           x integer,
                           y integer
                      )''')
             c.execute('''create table tickmarks (
-                          img_id integer,
+                          image_id integer,
                           x integer,
                           y integer
                      )''')
-            c.execute('''create table tickmark_labels (
-                          img_id integer,
+            c.execute('''create table tickmark_numbers (
+                          image_id integer,
                           x integer,
                           y integer,
                           width integer,
@@ -37,31 +38,61 @@ class LabelDB(object):
 
     def has_been_created(self):
         c = self.conn.cursor()
-        c.execute("select name from sqlite_master where type='table' AND name='imgs';")
+        c.execute("select name from sqlite_master where type='table' AND name='images';")
         return c.fetchone() is not None
 
     def imgs(self):
         c = self.conn.cursor()
-        c.execute("select filename from imgs")
+        c.execute('select filename from images')
         return set(map(lambda f: f[0], c.fetchall()))
 
     def has_labels(self, img):
+        # TODO
         img_id = self._id_for_img(img)
         if img_id is None:
             return False
         c = self.conn.cursor()
-        c.execute('select img_id from labels where img_id=?', (img_id,))
+        c.execute('select image_id from bugs where image_id=?', (img_id,))
         label = c.fetchone()
         return label is not None
 
-    def get_labels(self, img):
+    def get_bugs(self, img):
         if not self.has_labels(img):
             return []
         c = self.conn.cursor()
-        c.execute("""select l.x, l.y
-                 from labels l join imgs i on l.img_id = i.id
-                 where i.filename=?""", (img,))
+        c.execute('''select b.x, b.y
+                 from bugs b join images i on b.image_id = i.id
+                 where i.filename=?''', (img,))
         return c.fetchall()
+
+    def get_tickmarks(self, img):
+        if not self.has_labels(img):
+            return []
+        c = self.conn.cursor()
+        c.execute('''select t.x, t.y
+                 from tickmarks t join images i on t.image_id = i.id
+                 where i.filename=?''', (img,))
+        return c.fetchall()
+
+    def get_tickmark_numbers(self, img):
+        if not self.has_labels(img):
+            return []
+        c = self.conn.cursor()
+        c.execute('''select t.x, t.y, t.width, t.height, t.tickmark_value
+                 from tickmark_numbers t join images i on t.image_id = i.id
+                 where i.filename=?''', (img,))
+        return c.fetchall()
+
+    def get_complete(self, img):
+        if not self.has_labels(img):
+            return False
+        c = self.conn.cursor()
+        c.execute('select complete from images where filename=?', (img,))
+        complete = c.fetchone()
+        if complete is None:
+            return False
+        else:
+            return complete
 
     def set_labels(self, img, labels, flip=False):
         img_id = self._id_for_img(img)
@@ -73,7 +104,7 @@ class LabelDB(object):
 
     def _id_for_img(self, img):
         c = self.conn.cursor()
-        c.execute("select id from imgs where filename=?", (img,))
+        c.execute('select id from images where filename=?', (img,))
         img_id = c.fetchone()
         if img_id is None:
             return None
@@ -82,13 +113,13 @@ class LabelDB(object):
 
     def _create_row_for_img(self, img):
         c = self.conn.cursor()
-        c.execute("insert into imgs (filename) values (?)", (img,))
+        c.execute('insert into images (filename) values (?)', (img,))
         self.conn.commit()
         return self._id_for_img(img)
 
     def _delete_labels_for_img_id(self, img_id):
         c = self.conn.cursor()
-        c.execute("delete from labels where img_id=?", (img_id,))
+        c.execute('delete from bugs where image_id=?', (img_id,))
         self.conn.commit()
 
     def _add_rows_for_labels(self, img_id, labels, flip=False):
@@ -96,11 +127,10 @@ class LabelDB(object):
         for x, y in labels:
             if flip:
                 # TODO: DANGER WILL ROBERTSON! the existence of this, for the population
-                #       of db from centroids_of_connected_components denotes some inconsistency
-                #       somewhere... :/
+                #  of db from centroids_of_connected_components denotes some inconsistency
+                #  somewhere... :/
                 x, y = y, x
-            c.execute("insert into labels (img_id, x, y) values (?, ?, ?)", (img_id, x, y,))
-        self.conn.commit()
+            c.execute('insert into bugs (image_id, x, y) values (?, ?, ?)', (img_id, x, y,))
 
 
 if __name__ == '__main__':
@@ -110,4 +140,5 @@ if __name__ == '__main__':
     parser.add_argument('--label-db', type=str, default='data/labels.db')
     opts = parser.parse_args()
     db = LabelDB(label_db_file=opts.label_db)
+
     print('\n'.join(db.imgs()))
