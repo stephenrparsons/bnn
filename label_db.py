@@ -20,12 +20,15 @@ class LabelDB(object):
                      )''')
             c.execute('''create table tickmarks (
                           img_id integer,
-                          text_x integer,
-                          text_y integer,
-                          text_width integer,
-                          text_height integer,
-                          tick_x integer,
-                          tick_y integer,
+                          x integer,
+                          y integer
+                     )''')
+            c.execute('''create table tickmark_labels (
+                          img_id integer,
+                          x integer,
+                          y integer,
+                          width integer,
+                          height integer,
                           tickmark_value integer
                      )''')
         except sqlite3.OperationalError:

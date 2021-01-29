@@ -1,7 +1,6 @@
 import argparse
 import math
 import os
-import re
 import sys
 
 from PIL import Image
@@ -39,10 +38,12 @@ class LabelUI(QGraphicsView):
         self.setWindowTitle(label_db_filename)
 
         # what images to review?
-        # note: drop trailing / in dir name (if present)
-        self.img_dir = re.sub('/$', '', img_dir)
-        self.files = os.listdir(img_dir)
-        self.files = sorted(self.files)
+        self.img_dir = img_dir
+        files_list = []
+        for dir_path, dir_names, filenames in os.walk(img_dir):
+            files_list += [os.path.join(dir_path, f) for f in filenames]
+        files_list = sorted(files_list)
+        self.files = files_list
 
         # label db
         self.label_db = LabelDB(label_db_filename)
@@ -230,16 +231,17 @@ class LabelUI(QGraphicsView):
             raw = rawpy.imread(img_path)
             # Convert to PIL Image
             img = Image.fromarray(raw.postprocess())
-            # For some reason this is needed to get these to display in the interface
-            img = img.convert('RGBA')
         else:
             img = Image.open(img_path)
+        # For some reason RGB images do not like to display in the interface
+        # RGBA seems to work
+        img = img.convert('RGBA')
         # Convert to QImage
         img = ImageQt(img)
         self.set_image(img)
 
         # Draw image title
-        title = f'{img_name} ({self.file_idx + 1} of {len(self.files)})'
+        title = f'{os.path.basename(img_name)} ({self.file_idx + 1} of {len(self.files)})'
         self.setWindowTitle(title)
 
         # Look up any existing bugs in DB for this image and add them
