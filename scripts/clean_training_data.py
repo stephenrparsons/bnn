@@ -24,11 +24,11 @@ def main():
                 new_path = os.path.join(args.output, relative_path, f)
                 new_path = os.path.splitext(new_path)[0] + '.png'
                 os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                print(new_path)
                 if os.path.isfile(new_path) and args.skip_existing_images:
                     print(f'{new_path} already exists, skipping')
                 else:
                     try:
+                        print(new_path)
                         # Read raw image
                         raw = rawpy.imread(original_path)
                         # Convert to PIL Image
@@ -41,7 +41,7 @@ def main():
                         img.save(new_path)
                         images_processed += 1
                     except rawpy._rawpy.LibRawIOError:
-                        print('rawpy._rawpy.LibRawIOError processing current file, skipping')
+                        print('error: rawpy._rawpy.LibRawIOError processing current file, skipping')
         for d in dirs:
             if 'copy' in d.lower():
                 dirs.remove(d)
