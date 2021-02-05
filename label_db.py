@@ -1,5 +1,7 @@
 import sqlite3
 
+from labels import Bug, Tickmark, TickmarkNumber
+
 
 class LabelDB(object):
     def __init__(self, label_db_file='data/labels.db', check_same_thread=True):
@@ -47,14 +49,16 @@ class LabelDB(object):
         return set(map(lambda f: f[0], c.fetchall()))
 
     def has_labels(self, img):
-        # TODO
         img_id = self._id_for_img(img)
         if img_id is None:
             return False
         c = self.conn.cursor()
-        c.execute('select image_id from bugs where image_id=?', (img_id,))
+        c.execute('select bugs.image_id from bugs inner join tickmarks t on bugs.image_id = t.image_id '
+                  'inner join tickmark_numbers tn on bugs.image_id = tn.image_id where bugs.image_id=?', (img_id,))
         label = c.fetchone()
-        return label is not None
+        if label is not None:
+            return True
+        return self.get_complete(img)
 
     def get_bugs(self, img):
         if not self.has_labels(img):
@@ -83,16 +87,19 @@ class LabelDB(object):
                  where i.filename=?''', (img,))
         return c.fetchall()
 
+    def set_complete(self, img, complete):
+        c = self.conn.cursor()
+        c.execute('update images set complete=? where filename=?', (complete, img,))
+        self.conn.commit()
+
     def get_complete(self, img):
-        if not self.has_labels(img):
-            return False
         c = self.conn.cursor()
         c.execute('select complete from images where filename=?', (img,))
         complete = c.fetchone()
         if complete is None:
             return False
         else:
-            return complete
+            return bool(complete[0])
 
     def set_labels(self, img, labels, flip=False):
         img_id = self._id_for_img(img)
@@ -100,7 +107,7 @@ class LabelDB(object):
             img_id = self._create_row_for_img(img)
         else:
             self._delete_labels_for_img_id(img_id)
-        self._add_rows_for_labels(img_id, labels, flip=flip)
+        self._add_rows_for_labels(img_id, labels, flip_x_y=flip)
 
     def _id_for_img(self, img):
         c = self.conn.cursor()
@@ -113,24 +120,32 @@ class LabelDB(object):
 
     def _create_row_for_img(self, img):
         c = self.conn.cursor()
-        c.execute('insert into images (filename) values (?)', (img,))
+        c.execute('insert into images (filename, complete) values (?, ?)', (img, False,))
         self.conn.commit()
         return self._id_for_img(img)
 
     def _delete_labels_for_img_id(self, img_id):
         c = self.conn.cursor()
         c.execute('delete from bugs where image_id=?', (img_id,))
+        c.execute('delete from tickmarks where image_id=?', (img_id,))
+        c.execute('delete from tickmark_numbers where image_id=?', (img_id,))
         self.conn.commit()
 
-    def _add_rows_for_labels(self, img_id, labels, flip=False):
+    def _add_rows_for_labels(self, img_id, labels, flip_x_y=False):
         c = self.conn.cursor()
-        for x, y in labels:
-            if flip:
-                # TODO: DANGER WILL ROBERTSON! the existence of this, for the population
-                #  of db from centroids_of_connected_components denotes some inconsistency
-                #  somewhere... :/
+        for label in labels:
+            x, y = label.x, label.y
+            if flip_x_y:
                 x, y = y, x
-            c.execute('insert into bugs (image_id, x, y) values (?, ?, ?)', (img_id, x, y,))
+            if isinstance(label, Bug):
+                c.execute('insert into bugs (image_id, x, y) values (?, ?, ?)', (img_id, x, y,))
+            elif isinstance(label, Tickmark):
+                c.execute('insert into tickmarks (image_id, x, y) values (?, ?, ?)', (img_id, x, y,))
+            elif isinstance(label, TickmarkNumber):
+                w, h, v = label.width, label.height, label.value
+                c.execute('insert into tickmark_numbers (image_id, x, y, width, height, tickmark_value) '
+                          'values (?, ?, ?, ?, ?, ?)', (img_id, x, y, w, h, v))
+        self.conn.commit()
 
 
 if __name__ == '__main__':

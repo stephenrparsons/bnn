@@ -7,44 +7,11 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush, QFont, QFontMetrics
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QInputDialog
+from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QInputDialog, QGraphicsPixmapItem
 import rawpy
 
+from labels import Bug, Tickmark, TickmarkNumber
 from label_db import LabelDB
-
-
-class Label:
-    """Base class for labels, to be subclassed
-    """
-    def __init__(self, x, y, canvas_id):
-        self.x = x
-        self.y = y
-        self.canvas_id = canvas_id
-
-
-class Bug(Label):
-    """Bug label
-    """
-    def __init__(self, x, y, canvas_id):
-        super().__init__(x, y, canvas_id)
-
-
-class Tickmark(Label):
-    """Tickmark label for the mark itself, not the numbers
-    """
-    def __init__(self, x, y, canvas_id):
-        super().__init__(x, y, canvas_id)
-
-
-class TickmarkNumber(Label):
-    """Label surrounding the numbers written next to a tickmark
-    """
-    def __init__(self, x, y, canvas_id, width, height, value, number_canvas_id):
-        super().__init__(x, y, canvas_id)
-        self.width = width
-        self.height = height
-        self.value = value
-        self.number_canvas_id = number_canvas_id
 
 
 class LabelUI(QGraphicsView):
@@ -82,7 +49,7 @@ class LabelUI(QGraphicsView):
 
         # Flag to denote if bugs are being displayed or not.
         # While not displayed, we lock down all image navigation
-        self.bugs_on = True
+        self.display_labels = True
 
         # Main review loop
         self.file_idx = 0
@@ -113,14 +80,30 @@ class LabelUI(QGraphicsView):
 
         self.display_image()
         self.show()
+        self.setWindowState(Qt.WindowMaximized)
 
     def update_title(self):
         name = os.path.basename(self.files[self.file_idx])
         num_bugs = 0
+        num_tickmarks = 0
+        num_tickmark_numbers = 0
         for label in self.x_y_to_labels.values():
             if isinstance(label, Bug):
                 num_bugs += 1
-        title = f'{name} ({self.file_idx + 1} of {len(self.files)}): {num_bugs} bugs'
+            elif isinstance(label, Tickmark):
+                num_tickmarks += 1
+            elif isinstance(label, TickmarkNumber):
+                num_tickmark_numbers += 1
+        title = f'{name} ({self.file_idx + 1} of {len(self.files)}): '
+        title += f'{num_bugs} bug'
+        if num_bugs != 1:
+            title += 's'
+        title += f', {num_tickmarks} tickmark'
+        if num_tickmarks != 1:
+            title += 's'
+        title += f', {num_tickmark_numbers} tickmark number'
+        if num_tickmark_numbers != 1:
+            title += 's'
         if self.complete:
             title += ' [COMPLETE]'
         self.setWindowTitle(title)
@@ -208,11 +191,16 @@ class LabelUI(QGraphicsView):
             if self._started_tickmark_click:
                 if click_distance < 1:
                     self.add_tickmark_event(event)
-                view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
-                selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
-                self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
-                if selection_bbox.isValid() and (selection_bbox != view_bbox):
-                    self.add_tickmark_number_event(selection_bbox)
+                else:
+                    view_bbox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
+                    selection_bbox = self.scene.selectionArea().boundingRect().intersected(view_bbox)
+                    self.scene.setSelectionArea(QPainterPath())  # Clear current selection area.
+                    if selection_bbox.isValid() and (selection_bbox != view_bbox):
+                        self.add_tickmark_number_event(selection_bbox)
+                        # A little hacky, assume someone releases T key to type the numbers.
+                        # If they keep it pressed down they'll be switched back to bug mode
+                        # and will have to press it again.
+                        self._t_key_pressed = False
             else:
                 if click_distance < 1:
                     self.add_bug_event(event)
@@ -227,9 +215,10 @@ class LabelUI(QGraphicsView):
                 self.update_viewer()
             self.setDragMode(QGraphicsView.NoDrag)
             if click_distance < 1:
-                self.remove_closest_bug_event(event)
+                self.remove_closest_label_event(event)
             self.rightMouseButtonReleased.emit(scene_pos.x(), scene_pos.y())
         self._started_tickmark_click = False
+        self.update_title()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Right:
@@ -239,17 +228,21 @@ class LabelUI(QGraphicsView):
         elif event.key() == Qt.Key_Up:
             self.toggle_bugs()
         elif event.key() == Qt.Key_N:
-            self.display_next_unlabelled_image()
+            self.display_next_incomplete_image()
         elif event.key() == Qt.Key_Q:
-            QApplication.instance().quit()
+            self.exit_program()
         elif event.key() == Qt.Key_Escape:
             self.zoomStack = []  # Clear zoom stack.
             self.update_viewer()
         elif event.key() == Qt.Key_T:
             self._t_key_pressed = True
-        elif event.key() == Qt.Key_G:
+        elif event.key() == Qt.Key_C:
             self.complete = False if self.complete else True
             self.update_title()
+
+    def exit_program(self):
+        self._flush_pending_x_y_to_boxes()
+        QApplication.instance().quit()
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_T:
@@ -275,6 +268,9 @@ class LabelUI(QGraphicsView):
         self.set_image(img)
 
         # Look up any existing labels in DB for this image and add them
+        self.update_state_from_db(img_name)
+
+    def update_state_from_db(self, img_name):
         existing_bugs = self.label_db.get_bugs(img_name)
         for x, y in existing_bugs:
             self.add_bug_at(x, y)
@@ -289,8 +285,8 @@ class LabelUI(QGraphicsView):
         self.update_title()
 
     def display_next_image(self):
-        if not self.bugs_on:
-            print('ignore move to next image; bugs not on')
+        if not self.display_labels:
+            print('ignore move to next image; labels not displayed')
             return
         self._flush_pending_x_y_to_boxes()
         self.file_idx += 1
@@ -300,8 +296,8 @@ class LabelUI(QGraphicsView):
         self.display_image()
 
     def display_previous_image(self):
-        if not self.bugs_on:
-            print('ignore move to previous image; bugs not on')
+        if not self.display_labels:
+            print('ignore move to previous image; labels not displayed')
             return
         self._flush_pending_x_y_to_boxes()
         self.file_idx -= 1
@@ -330,64 +326,88 @@ class LabelUI(QGraphicsView):
 
     def add_bug_event(self, e):
         scene_pos = self.mapToScene(e.pos())
-        if not self.bugs_on:
-            print('ignore add bug; bugs not on')
+        if not self.display_labels:
+            print('ignore add bug; labels not displayed')
             return
         self.add_bug_at(scene_pos.x(), scene_pos.y())
 
-    def add_tickmark_number_event(self, box):
-        if not self.bugs_on:
-            print('ignore add tickmark; bugs not on')
+    def add_tickmark_at(self, x, y):
+        size = self.scene.width() // 300
+        rectangle_id = self.scene.addRect(x - size // 2, y - size // 2, size, size, QPen(Qt.black), QBrush(Qt.blue))
+        self.x_y_to_labels[(x, y)] = Tickmark(x, y, rectangle_id)
+        self.update_title()
+        
+    def add_tickmark_event(self, e):
+        scene_pos = self.mapToScene(e.pos())
+        if not self.display_labels:
+            print('ignore add tickmark; labels not displayed')
             return
-        rectangle_id = self.scene.addRect(box, QPen(Qt.blue, self.scene.width() // 300))
-        val, _ = QInputDialog.getInt(self, 'Input', 'Enter tickmark value:')
+        self.add_tickmark_at(scene_pos.x(), scene_pos.y())
+
+    def add_tickmark_number_at(self, x, y, width, height, val):
+        rectangle_id = self.scene.addRect(x, y, width, height, QPen(Qt.blue, self.scene.width() // 300))
         font = QFont()
         font_pixel_size = 1
         font.setPixelSize(font_pixel_size)
-        while QFontMetrics(font).boundingRect(str(val)).width() < box.width()\
-                and QFontMetrics(font).boundingRect(str(val)).height() < box.height():
+        while QFontMetrics(font).boundingRect(str(val)).width() < width \
+                and QFontMetrics(font).boundingRect(str(val)).height() < height:
             font_pixel_size += 1
             font.setPixelSize(font_pixel_size)
         font_pixel_size -= 1
         number_canvas_id = self.scene.addText(str(val), font)
         number_canvas_id.setDefaultTextColor(Qt.blue)
-        number_canvas_id.setPos(QPoint(int(box.x()), int(box.y())))
-        self.x_y_to_labels[(box.x, box.y)] = TickmarkNumber(box.x, box.y, rectangle_id,
-                                                            box.width(), box.height(), val,
-                                                            number_canvas_id)
-        # TODO LEFT OFF make t toggle tickmark mode rather than current thing
+        number_canvas_id.setPos(QPoint(int(x), int(y)))
+        self.x_y_to_labels[(x, y)] = TickmarkNumber(x, y, rectangle_id, width, height, val, number_canvas_id)
+
+    def add_tickmark_number_event(self, box):
+        if not self.display_labels:
+            print('ignore add tickmark; labels not displayed')
+            return
+        val, _ = QInputDialog.getInt(self, 'Input', 'Enter tickmark value:')
+        self.add_tickmark_number_at(box.x(), box.y(), box.width(), box.height(), val)
 
     def _flush_pending_x_y_to_boxes(self):
-        # TODO fix this to handle all things
-        # Flush existing points.
+        """Write labels to database and remove them from canvas
+        """
         img_name = self.files[self.file_idx]
-        self.label_db.set_labels(img_name, self.x_y_to_labels.keys())
-        for rect in self.x_y_to_labels.values():
-            self.scene.removeItem(rect)
+        # Write to database
+        self.label_db.set_labels(img_name, self.x_y_to_labels.values())
+        # Remove from canvas
+        for label in self.x_y_to_labels.values():
+            self.remove_label(label)
         self.x_y_to_labels.clear()
+        self.label_db.set_complete(img_name, self.complete)
 
     def toggle_bugs(self):
-        if self.bugs_on:
-            # store x,y s in tmp list and delete all rectangles from canvas
-            self.tmp_x_y = []
-            for (x, y), rectangle_id in self.x_y_to_labels.items():
-                self.remove_bug(rectangle_id)
-                self.tmp_x_y.append((x, y))
-            self.x_y_to_labels = {}
-            self.bugs_on = False
-        else:  # bugs not on
-            # restore all temp stored bugs
-            for x, y in self.tmp_x_y:
-                self.add_bug_at(x, y)
-            self.bugs_on = True
+        # if self.display_labels:
+        #     # store x,y s in tmp list and delete all rectangles from canvas
+        #     self.tmp_x_y = []
+        #     for (x, y), rectangle_id in self.x_y_to_labels.items():
+        #         self.remove_label(rectangle_id)
+        #         self.tmp_x_y.append((x, y))
+        #     self.x_y_to_labels = {}
+        #     self.display_labels = False
+        # else:  # labels not displayed
+        #     # restore all temp stored bugs
+        #     for x, y in self.tmp_x_y:
+        #         self.add_bug_at(x, y)
+        #     self.display_labels = True
+        self.display_labels = not self.display_labels
+        for item in self.scene.items():
+            if not isinstance(item, QGraphicsPixmapItem):
+                item.setVisible(self.display_labels)
 
-    def remove_bug(self, rectangle_id):
-        self.scene.removeItem(rectangle_id)
+    def remove_label(self, label):
+        canvas_id = label.canvas_id
+        self.scene.removeItem(canvas_id)
+        if isinstance(label, TickmarkNumber):
+            number_canvas_id = label.number_canvas_id
+            self.scene.removeItem(number_canvas_id)
 
-    def remove_closest_bug_event(self, e):
+    def remove_closest_label_event(self, e):
         scene_pos = self.mapToScene(e.pos())
-        if not self.bugs_on:
-            print('ignore remove bug; bugs not on')
+        if not self.display_labels:
+            print('ignore remove label; labels not displayed')
             return
         if len(self.x_y_to_labels) == 0:
             return
@@ -398,7 +418,8 @@ class LabelUI(QGraphicsView):
             if sqr_distance < closest_sqr_distance or closest_point is None:
                 closest_point = (x, y)
                 closest_sqr_distance = sqr_distance
-        self.remove_bug(self.x_y_to_labels.pop(closest_point))
+        self.remove_label(self.x_y_to_labels.pop(closest_point))
+        self.update_title()
 
 
 def main():
@@ -408,18 +429,21 @@ def main():
     args = parser.parse_args()
 
     print('''Usage:
-    Left click: label bug
-    Right click: Remove nearest bug label
-    Drag right mouse: zoom to box
-    Drag left mouse: Pan (when zoomed in)
-    Drag left mouse while holding T: identify tick mark
+    Left click:                      label bug
+    Left click while holding T:      label tickmark
+    Drag left mouse while holding T: identify tick mark number
+    Right click:                     remove nearest label
+    Drag right mouse:                zoom to box
+    Drag left mouse:                 pan
 
-    RIGHT: next image
-    LEFT: previous image
-    UP: toggle labels
-    N: next image with no labels
-    ESC: reset zoom
-    Q: quit
+    RIGHT:        next image
+    LEFT:         previous image
+    UP:           toggle display of labels
+    N:            next incomplete image
+    C:            mark image as complete (all bugs and tickmarks labeled)
+    T:            hold to label tickmarks and tickmark numbers
+    ESC:          reset zoom
+    Q:            quit
     '''
           )
 
