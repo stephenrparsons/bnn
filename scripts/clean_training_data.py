@@ -23,17 +23,20 @@ def main():
                 new_path = os.path.splitext(new_path)[0] + '.png'
                 os.makedirs(os.path.dirname(new_path), exist_ok=True)
                 print(new_path)
-                # Read raw image
-                raw = rawpy.imread(original_path)
-                # Convert to PIL Image
-                img = Image.fromarray(raw.postprocess())
-                # Convert to RGB
-                img = img.convert('RGB')
-                # Flip right side up
-                img = img.transpose(Image.ROTATE_180)
-                # Save to new file
-                img.save(new_path)
-                images_processed += 1
+                try:
+                    # Read raw image
+                    raw = rawpy.imread(original_path)
+                    # Convert to PIL Image
+                    img = Image.fromarray(raw.postprocess())
+                    # Convert to RGB
+                    img = img.convert('RGB')
+                    # Flip right side up
+                    img = img.transpose(Image.ROTATE_180)
+                    # Save to new file
+                    img.save(new_path)
+                    images_processed += 1
+                except rawpy._rawpy.LibRawIOError:
+                    print('rawpy._rawpy.LibRawIOError processing current file, skipping')
         for d in dirs:
             if 'copy' in d.lower():
                 dirs.remove(d)
