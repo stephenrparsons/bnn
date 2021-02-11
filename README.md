@@ -30,9 +30,10 @@ $ . venv/bin/activate
 - [x] switch from tkinter to PyQt5 since tkinter [being weird](https://bugs.python.org/issue42480)
 - [x] support raw images
 - [x] decide for raw images: flip them over on disk? (yes) ~~if not, store their label coordinates flipped or not?~~
-- [ ] initial data processing: flip raw images, convert to png
-- [ ] support labeling of tick marks
+- [x] initial data processing: flip raw images, convert to png
+- [x] support labeling of tick marks
 - [x] figure out image directory structure
+- [ ] have title show how many total bugs exist on images currently open in program
 
 The original README from Mat's bee project is below.
 
