@@ -7,7 +7,7 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QPen, QBrush, QFont, QFontMetrics
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QInputDialog, QGraphicsPixmapItem
+from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QInputDialog, QGraphicsPixmapItem, QFileDialog
 import rawpy
 
 from labels import Bug, Tickmark, TickmarkNumber
@@ -31,6 +31,9 @@ class LabelUI(QGraphicsView):
     def __init__(self, label_db_filename, img_dir):
         QGraphicsView.__init__(self)
         self.setWindowTitle(label_db_filename)
+
+        if img_dir is None:
+            img_dir = str(QFileDialog.getExistingDirectory(self, 'Select image directory'))
 
         self.img_dir = img_dir
         files_list = []
@@ -424,7 +427,7 @@ class LabelUI(QGraphicsView):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image-dir', type=str, required=True)
+    parser.add_argument('--image-dir', type=str)
     parser.add_argument('--label-db', type=str, required=True)
     args = parser.parse_args()
 
