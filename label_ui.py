@@ -35,13 +35,25 @@ class LabelUI(QGraphicsView):
         if img_dir is None:
             img_dir = str(QFileDialog.getExistingDirectory(self, 'Select image directory'))
 
+        if not os.path.exists(img_dir):
+            raise RuntimeError(f'Provided directory {img_dir} does not exist')
+
         self.img_dir = img_dir
         files_list = []
         # Walk through directory tree, get all files
         for dir_path, dir_names, filenames in os.walk(img_dir):
             files_list += [os.path.join(dir_path, f) for f in filenames]
         files_list = sorted(files_list)
+        files_list = list(
+            filter(
+                lambda x: x.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.cr2')),
+                files_list
+            )
+        )
         self.files = files_list
+
+        if len(self.files) == 0:
+            raise RuntimeError(f'Unable to find any image files in provided directory {img_dir}')
 
         # Label db
         self.label_db = LabelDB(label_db_filename)
