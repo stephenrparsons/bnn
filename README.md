@@ -34,6 +34,7 @@ $ . venv/bin/activate
 - [x] support labeling of tick marks
 - [x] figure out image directory structure
 - [ ] have title show how many total bugs exist on images currently open in program
+- [ ] run initial training example pipeline on GPU machine
 
 The original README from Mat's bee project is below.
 
