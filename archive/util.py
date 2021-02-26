@@ -21,18 +21,6 @@ def hms(secs):
         return "%02d" % secs
 
 
-def xys_to_bitmap(xys, height, width, rescale=1.0):
-    # note: include trailing 1 dim to easier match model output
-    bitmap = np.zeros((int(height * rescale), int(width * rescale), 1), dtype=np.float32)
-    for x, y in xys:
-        try:
-            bitmap[int(y * rescale), int(x * rescale), 0] = 1.0  # recall images are (height, width)
-        except IndexError as e:
-            print("IndexError: are --height and --width correct?")
-            raise e
-    return bitmap
-
-
 def debug_img(img, bitmap, logistic_output):
     # create a debug image with three columns; 1) original RGB. 2) black/white
     # bitmap of labels 3) black/white bitmap of predictions (with centroids coloured
@@ -142,13 +130,6 @@ def bitmap_to_pil_image(bitmap):
     rgb_array[:, :, 1] = single_channel
     rgb_array[:, :, 2] = single_channel
     return Image.fromarray(rgb_array)
-
-
-def bitmap_to_single_channel_pil_image(bitmap):
-    h, w, c = bitmap.shape
-    assert c == 1
-    bitmap = np.uint8(bitmap[:, :, 0] * 255)
-    return Image.fromarray(bitmap, mode='L')  # L => (8-bit pixels, black and white)
 
 
 def side_by_side(rgb, bitmap):
