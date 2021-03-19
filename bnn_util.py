@@ -1,10 +1,20 @@
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
 
+
+# Example input and output:
 # /Users/Paullaptop/Desktop/DATA/ DATA 2018/04/60D/ HR 48/IMG_1763.png
 # 202012 Paul/training/DATA - Aggregation 2018/04 - 180404 CIN-11/60D/ HR 48/IMG_1763.png
-def get_drive_path(filename):
-    pass
+def get_path_relative_to_drive(filepath):
+    filepath = Path(filepath)
+    if '/Users/Paullaptop/Desktop/DATA' in str(filepath):
+        filepath = filepath.relative_to('/Users/Paullaptop/Desktop/DATA')
+        filepath = Path(str(filepath).replace(' DATA 2018', 'DATA - Aggregation 2018'))
+        filepath = Path(str(filepath).replace('/04/', '/04 - 180404 CIN-11/'))
+        filepath = 'training' / filepath
+    return str(filepath)
 
 
 def xys_to_bitmap(xys, height, width, rescale=1.0):
@@ -14,7 +24,7 @@ def xys_to_bitmap(xys, height, width, rescale=1.0):
         try:
             bitmap[int(y * rescale), int(x * rescale), 0] = 1.0  # recall images are (height, width)
         except IndexError as e:
-            print("IndexError: are --height and --width correct?")
+            print('IndexError: are --height and --width correct?')
             raise e
     return bitmap
 

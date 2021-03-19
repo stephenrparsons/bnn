@@ -35,3 +35,4 @@ $ . venv/bin/activate
 - [x] figure out image directory structure
 - [ ] have title show how many total bugs exist on images currently open in program
 - [ ] run initial training example pipeline on GPU machine
+- [ ] consider modifications such that nobody has to locally download the images
