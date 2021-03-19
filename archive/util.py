@@ -1,24 +1,7 @@
 from PIL import Image, ImageDraw
 from skimage import measure
-import io
 import math
 import numpy as np
-import tensorflow as tf
-import yaml
-
-
-def hms(secs):
-    if secs < 0:
-        return "<0"  # clumsy
-    secs = int(secs)
-    mins, secs = divmod(secs, 60)
-    hrs, mins = divmod(mins, 60)
-    if hrs > 0:
-        return "%d:%02d:%02d" % (hrs, mins, secs)
-    elif mins > 0:
-        return "%02d:%02d" % (mins, secs)
-    else:
-        return "%02d" % secs
 
 
 def debug_img(img, bitmap, logistic_output):
@@ -46,25 +29,6 @@ def debug_img(img, bitmap, logistic_output):
     draw.line([3 * w, 0, 3 * w, h], fill='blue')
     # done
     return canvas
-
-
-def explicit_summaries(tag_values):
-    values = [tf.Summary.Value(tag=tag, simple_value=value) for tag, value in tag_values.items()]
-    return tf.Summary(value=values)
-
-
-def pil_image_to_tf_summary(img, tag="debug_img"):
-    # serialise png bytes
-    sio = io.BytesIO()
-    img.save(sio, format="png")
-    png_bytes = sio.getvalue()
-
-    # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/framework/summary.proto
-    return tf.Summary(value=[tf.Summary.Value(tag=tag,
-                                              image=tf.Summary.Image(height=img.size[0],
-                                                                     width=img.size[1],
-                                                                     colorspace=3,  # RGB
-                                                                     encoded_image_string=png_bytes))])
 
 
 # def dice_loss(y, y_hat, batch_size, smoothing=0):
@@ -116,63 +80,6 @@ def red_dots(rgb, centroids):
     return img
 
 
-class SetComparison(object):
-    def __init__(self):
-        self.true_positive_count = 0
-        self.false_negative_count = 0
-        self.false_positive_count = 0
-
-    def compare_sets(self, true_pts, predicted_pts, threshold=10.0):
-        # compare two sets of true & predicted centroids and calculate TP, FP and FN rate.
-
-        # iteratively find closest point in each set and if they are close enough (according
-        # to threshold) declare them them a match (i.e. true positive). once the closest
-        # match is above the threshold, or we run out of points to match, stop comparing.
-        # whatever remains in true_pts & predicted_pts after matching is done are false
-        # negatives & positives respectively.
-        TP = 0
-        while len(true_pts) > 0 and len(predicted_pts) > 0:
-            # find indexes of closest pair
-            closest_pair = None
-            closest_sqr_distance = None
-            for t_i, t in enumerate(true_pts):
-                for p_i, p in enumerate(predicted_pts):
-                    sqr_distance = (t[0] - p[0]) ** 2 + (t[1] - p[1]) ** 2
-                    if closest_sqr_distance is None or sqr_distance < closest_sqr_distance:
-                        closest_pair = t_i, p_i
-                        closest_sqr_distance = sqr_distance
-            # if closest pair is above threshold so comparing
-            closest_distance = math.sqrt(closest_sqr_distance)
-            if closest_distance > threshold:
-                break
-            # otherwise delete closest pair & declare them a match
-            t_i, p_i = closest_pair
-            del true_pts[t_i]
-            del predicted_pts[p_i]
-            TP += 1
-
-        # remaining unmatched entries are false positives & negatives.
-        FN = len(true_pts)
-        FP = len(predicted_pts)
-
-        # aggregate
-        self.true_positive_count += TP
-        self.false_negative_count += FN
-        self.false_positive_count += FP
-
-        # return for just this comparison
-        return TP, FN, FP
-
-    def precision_recall_f1(self):
-        try:
-            precision = self.true_positive_count / (self.true_positive_count + self.false_positive_count)
-            recall = self.true_positive_count / (self.true_positive_count + self.false_negative_count)
-            f1 = 2 * (precision * recall) / (precision + recall)
-            return precision, recall, f1
-        except ZeroDivisionError:
-            return 0, 0, 0
-
-
 def check_images(fnames):
     prev_width, prev_height = 0, 0
     for i, fname in enumerate(fnames):
@@ -189,8 +96,3 @@ def check_images(fnames):
             print("Image size does not match others:", fname, "wh:", width, height)
             exit()
     return width, height
-
-
-def latest_checkpoint_in_dir(ckpt_dir):
-    checkpoint_info = yaml.load(open("%s/checkpoint" % ckpt_dir).read())
-    return checkpoint_info['model_checkpoint_path']
