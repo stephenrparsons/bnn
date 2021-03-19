@@ -4,29 +4,22 @@
 
 import argparse
 import os
-import sys
 
 from PIL import Image
 
 import bnn_util
 from label_db import LabelDB
 
-# TODO: make this multiprocess, too slow as is...
-
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--label-db', type=str, help='label_db to materialise bitmaps from')
-parser.add_argument('--directory', type=str, help='directory to store bitmaps')
 parser.add_argument('--label-rescale', type=float, default=0.5,
                     help='relative scale of label bitmap compared to input image')
 opts = parser.parse_args()
 
 label_db = LabelDB(label_db_file=opts.label_db)
 
-if not os.path.exists(opts.directory):
-    os.makedirs(opts.directory)
-
 filenames = list(label_db.imgs())
-for i, filename in enumerate(filenames):
+for filename in filenames:
     original_filename = filename
     filename = bnn_util.get_path_relative_to_drive(filename)
     drive_base_path = os.path.expanduser('~/data/srpa226-drive/Sharing/202012 Paul/')
