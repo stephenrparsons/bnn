@@ -160,8 +160,8 @@ while not done:
     train_model.save_weights(save_filename)
 
     # ... test
-    stats = test.pr_stats(opts.run, opts.test_image_dir, opts.label_db, opts.connected_components_threshold)
-    tag_values = {k: stats[k] for k in ['precision', 'recall', 'f1']}
+    # stats = test.pr_stats(opts.run, opts.test_image_dir, opts.label_db, opts.connected_components_threshold)
+    # tag_values = {k: stats[k] for k in ['precision', 'recall', 'f1']}
     # test_summaries_writer.add_summary(bnn_util.explicit_summaries({"xent": test_loss}), step)
     # test_summaries_writer.add_summary(bnn_util.explicit_summaries(tag_values), step)
     # for idx, img in enumerate(stats['debug_imgs']):
@@ -175,7 +175,7 @@ while not done:
     log.append("time %d" % int(time.time() - start_time))
     log.append("train_loss %f" % train_loss)
     # log.append("test_loss %s" % test_loss)
-    log.append("test stats { p:%0.2f, r:%0.2f, f1:%0.2f }" % tuple([stats[k] for k in ['precision', 'recall', 'f1']]))
+    # log.append("test stats { p:%0.2f, r:%0.2f, f1:%0.2f }" % tuple([stats[k] for k in ['precision', 'recall', 'f1']]))
     print("\t".join(log))
 
     # check if done by steps or time
