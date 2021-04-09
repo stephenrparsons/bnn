@@ -35,6 +35,6 @@ $ . venv/bin/activate
 - [x] figure out image directory structure
 - [x] switch from TensorFlow 1 to TensorFlow 2
 - [ ] have title show how many total bugs exist on images currently open in program
-- [ ] run initial training example pipeline on GPU machine
+- [x] run initial training example pipeline on GPU machine
 - [ ] continue working through example batch script
 - [ ] consider modifications such that nobody has to locally download the images

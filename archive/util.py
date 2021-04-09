@@ -1,5 +1,4 @@
 from PIL import Image, ImageDraw
-from skimage import measure
 import math
 import numpy as np
 
@@ -43,41 +42,12 @@ def debug_img(img, bitmap, logistic_output):
 #  loss = tf.Print(loss, [intersection, intersection_rs, nom, denom], first_n=100, summarize=10000)
 #  return loss
 
-def centroids_of_connected_components(bitmap, threshold=0.05, rescale=1.0):
-    # TODO: don't do raw (binary) threshold; instead use P(y) as weighting for centroid
-    #       e.g. https://arxiv.org/abs/1806.03413 sec 3.D
-    #       update: this didn't help much :/ centroid weighted by intensities moved only up
-    #       to a single pixel (guess centroids are already quite evenly dispersed)
-    #       see https://gist.github.com/matpalm/20a3974ceb7f632f935285262fac4e98
-    # TODO: hunt down the x/y swap between PIL and label db :/
-
-    # threshold
-    mask = bitmap > threshold
-    bitmap = np.zeros_like(bitmap)
-    bitmap[mask] = 1.0
-    # calc connected components
-    all_labels = measure.label(bitmap)
-    # return centroids
-    centroids = []
-    for region in measure.regionprops(label_image=all_labels):
-        cx, cy = map(lambda p: int(p * rescale), (region.centroid[0], region.centroid[1]))
-        centroids.append((cx, cy))
-    return centroids
-
 
 def bitmap_from_centroids(centroids, h, w):
     bitmap = np.zeros((h, w, 1))
     for cx, cy in centroids:
         bitmap[cx, cy] = 1.0
     return bitmap
-
-
-def red_dots(rgb, centroids):
-    img = zero_centered_array_to_pil_image(rgb)
-    canvas = ImageDraw.Draw(img)
-    for y, x in centroids:  # recall: x/y flipped between db & pil
-        canvas.rectangle((x - 2, y - 2, x + 2, y + 2), fill='red')
-    return img
 
 
 def check_images(fnames):
