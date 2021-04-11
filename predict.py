@@ -49,6 +49,13 @@ for idx, filename in enumerate(sorted(imgs)):
     img = img.astype(np.float32)
     img = (img / 127.5) - 1.0  # -1.0 -> 1.0  # see data.py
 
+    original_shape = img.shape
+    difference = [0, 0]
+    for shape_idx in [0, 1]:
+        if original_shape[shape_idx] % 16 != 0:
+            difference[shape_idx] = 16 - original_shape[shape_idx] % 16
+    img = np.pad(img, ((0, difference[0]), (0, difference[1]), (0, 0)))
+
     # run through model (adding / removing dummy batch)
     # recall: output from model is logits so we need to expit
     # TODO: do this in batch !!
@@ -68,7 +75,7 @@ for idx, filename in enumerate(sorted(imgs)):
             debug_img = u.red_dots(rgb=img, centroids=centroids)
         else:
             raise Exception("unknown --export-pngs option")
-        debug_img.save("%s/%s.png" % (export_dir, filename))
+        debug_img.save("%s/%s" % (export_dir, filename))
 
     # set new labels (if requested)
     if db:

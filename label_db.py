@@ -134,7 +134,7 @@ class LabelDB(object):
     def _add_rows_for_labels(self, img_id, labels, flip_x_y=False):
         c = self.conn.cursor()
         for label in labels:
-            x, y = label.x, label.y
+            x, y = label
             if flip_x_y:
                 x, y = y, x
             if isinstance(label, Bug):
