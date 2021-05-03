@@ -38,3 +38,5 @@ $ . venv/bin/activate
 - [x] run initial training example pipeline on GPU machine
 - [ ] continue working through example batch script
 - [ ] consider modifications such that nobody has to locally download the images
+- [ ] get some outputs from the ml pipeline in database format so R code would work
+- [ ] wind down the ml and wrap up code changes, document everything, put labeling code somewhere
